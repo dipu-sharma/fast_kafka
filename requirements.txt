@@ -4,5 +4,6 @@ sqlalchemy
 psycopg2-binary
 aiokafka
 pydantic
+pydantic-settings
 alembic
 asyncpg
