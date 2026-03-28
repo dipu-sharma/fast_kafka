@@ -134,5 +134,5 @@ async def stop_producer():
 
 # 🔹 Startup hook (call in FastAPI lifespan)
 async def start_producer():
-    await ensure_topic()   # create topic once
+    await ensure_topic()
     await get_producer()
