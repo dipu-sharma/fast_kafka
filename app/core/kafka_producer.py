@@ -19,8 +19,7 @@ topic_lock = asyncio.Lock()
 topic_initialized = False
 
 
-# 🔹 Ensure Kafka topic exists (run once)
-async def ensure_topic():
+async def ensure_topics():
     global topic_initialized
 
     async with topic_lock:
@@ -34,22 +33,26 @@ async def ensure_topic():
             )
             await admin.start()
 
-            topics = await admin.list_topics()
+            existing_topics = await admin.list_topics()
+            required_topics = [settings.kafka_topic_transactions, settings.kafka_topic_accounts]
 
-            if settings.kafka_topic not in topics:
-                await admin.create_topics([
-                    NewTopic(
-                        name=settings.kafka_topic,
+            new_topics = []
+            for topic in required_topics:
+                if topic not in existing_topics:
+                    new_topics.append(NewTopic(
+                        name=topic,
                         num_partitions=1,
                         replication_factor=1
-                    )
-                ])
-                logger.info(f"✅ Created topic: {settings.kafka_topic}")
+                    ))
+
+            if new_topics:
+                await admin.create_topics(new_topics)
+                logger.info(f"✅ Created topics: {[t.name for t in new_topics]}")
 
             topic_initialized = True
 
         except Exception as e:
-            logger.warning(f"⚠️ Topic creation skipped: {e}")
+            logger.warning(f"⚠️ Topic creation skipped or failed: {e}")
 
         finally:
             if admin:
@@ -59,11 +62,9 @@ async def ensure_topic():
                     pass
 
 
-# 🔹 Get Kafka producer (safe + retry + singleton)
 async def get_producer():
     global producer
 
-    # reuse existing producer
     if producer and not producer._closed:
         return producer
 
@@ -77,7 +78,7 @@ async def get_producer():
             try:
                 producer = AIOKafkaProducer(
                     bootstrap_servers=settings.kafka_bootstrap_servers,
-                    value_serializer=lambda v: json.dumps(v).encode("utf-8")
+                    value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8")
                 )
 
                 await producer.start()
@@ -97,7 +98,6 @@ async def get_producer():
         return None
 
 
-# 🔹 Send message (fast + non-blocking)
 async def send_message(topic: str, message: dict):
     p = await get_producer()
 
@@ -106,23 +106,18 @@ async def send_message(topic: str, message: dict):
         return
 
     try:
-        # 🔥 FAST (non-blocking send)
         await p.send(topic, message)
-
         logger.info(f"✅ Sent to Kafka → {topic}: {message}")
 
     except UnknownTopicOrPartitionError:
-        logger.warning("⚠️ Topic missing, retrying after creation")
-
-        await ensure_topic()
-
+        logger.warning(f"⚠️ Topic {topic} missing, retrying after creation")
+        await ensure_topics()
         await p.send(topic, message)
 
     except Exception as e:
         logger.warning(f"⚠️ Kafka send failed: {e}")
 
 
-# 🔹 Stop producer (shutdown)
 async def stop_producer():
     global producer
 
@@ -132,7 +127,6 @@ async def stop_producer():
         logger.info("🛑 Kafka producer stopped")
 
 
-# 🔹 Startup hook (call in FastAPI lifespan)
 async def start_producer():
-    await ensure_topic()
+    await ensure_topics()
     await get_producer()
