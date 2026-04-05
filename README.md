@@ -1,30 +1,27 @@
-# Modular FastAPI Banking Application
+# Microservice FastAPI Banking Application
 
-A robust, asynchronous banking application built with FastAPI, PostgreSQL, and Kafka.
+A robust, asynchronous banking application built with FastAPI, PostgreSQL, and Kafka, refactored into a microservice-ready structure with Alembic migrations.
 
 ## Features
-- **Account Management**: Create and view accounts with real-time balance tracking.
-- **Transactions**: Secure deposits, withdrawals, and transfers with atomic database transactions.
-- **Event-Driven**: All major actions (account creation, transactions) emit events to Kafka.
-- **Modular Architecture**: Clean separation of concerns with module-wise organization (`router`, `service`, `schema`).
-- **Resilient Kafka Producer**: Built-in retry logic and automatic topic provisioning.
+- **Microservice Architecture**: Independent services for Accounts, Payments, Profiles, and Transactions.
+- **Database Migrations**: Centralized schema management using Alembic.
+- **Event-Driven**: Services communicate asynchronously via Kafka events.
+- **Shared Core**: Common logic (DB, Config, Kafka) resides in a shared `common/` package.
+- **Atomic Transactions**: Secure money movement with PostgreSQL row-level locking.
 
 ## Project Structure
 ```
 .
-├── main.py                 # Application entry point
-├── app/
-│   ├── core/               # Shared core logic (DB, Config, Kafka, Models)
-│   ├── accounts/           # Account management module
-│   │   ├── router.py
-│   │   ├── service.py
-│   │   └── schema.py
-│   └── transactions/       # Money movement module
-│       ├── router.py
-│       ├── service.py
-│       └── schema.py
-├── consumer.py             # Standalone background event consumer
-├── docker-compose.yml
+├── alembic/                # Database migrations
+├── common/                 # Shared logic (DB, Config, Kafka)
+├── services/               # Microservices
+│   ├── accounts/           # Account management
+│   ├── payments/           # 3rd party payment integration
+│   ├── profiles/           # User profile management
+│   └── transactions/       # Money movement (Deposit, Withdraw, Transfer)
+├── consumer.py             # Global event consumer
+├── main.py                 # Monolithic entry point (optional)
+├── docker-compose.yml      # Orchestration for all services
 └── Dockerfile
 ```
 
@@ -34,34 +31,36 @@ A robust, asynchronous banking application built with FastAPI, PostgreSQL, and K
 - Docker and Docker Compose
 
 ### Running the Application
-1. **Start all services**:
-   ```bash
-   docker-compose up --build
-   ```
-2. **Access the API Documentation**:
-   Open [http://localhost:8000/docs](http://localhost:8000/docs) in your browser.
+Start all services (Postgres, Kafka, 4 Microservices, Consumer, and Migrations):
+```bash
+docker-compose up --build
+```
 
-3. **Run the Background Consumer**:
-   (In a separate terminal, ensure you have dependencies installed)
-   ```bash
-   python consumer.py
-   ```
+### Service Endpoints
+Each service runs on its own port:
+- **Accounts Service**: [http://localhost:8001/docs](http://localhost:8001/docs)
+- **Payments Service**: [http://localhost:8002/docs](http://localhost:8002/docs)
+- **Profiles Service**: [http://localhost:8003/docs](http://localhost:8003/docs)
+- **Transactions Service**: [http://localhost:8004/docs](http://localhost:8004/docs)
 
-## API Endpoints
+## Database Migrations (Alembic)
 
-### Accounts
-- `POST /accounts/`: Create a new bank account.
-- `GET /accounts/`: List all accounts.
-- `GET /accounts/{id}`: Get account details and balance.
+Migrations are automatically applied when you run `docker-compose up`. 
 
-### Transactions
-- `POST /transactions/deposit`: Add funds to an account.
-- `POST /transactions/withdraw`: Remove funds from an account (checks for sufficient balance).
-- `POST /transactions/transfer`: Transfer money between two accounts (atomic operation).
-- `GET /transactions/history/{account_id}`: View transaction history for an account.
+### Generate a new migration
+If you change any models in `services/*/models.py`, generate a new migration script:
+```bash
+docker-compose run --rm migrations alembic revision --autogenerate -m "describe your changes"
+```
+
+### Manually apply migrations
+```bash
+docker-compose run --rm migrations alembic upgrade head
+```
 
 ## Technical Details
-- **FastAPI**: Modern, fast (high-performance) web framework.
+- **FastAPI**: High-performance web framework for each microservice.
 - **SQLAlchemy 2.0 (Async)**: Asynchronous ORM with `asyncpg`.
-- **AIOKafka**: Asynchronous Kafka client for Python.
-- **Pydantic v2**: Data validation and settings management.
+- **Alembic**: Database migration tool.
+- **AIOKafka**: Asynchronous Kafka integration.
+- **Docker Multi-service**: Each module is containerized independently.

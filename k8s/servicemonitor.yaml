@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fastapi-app-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus # Adjust this label based on your Prometheus Operator setup
+spec:
+  selector:
+    matchLabels:
+      app: fastapi-app # Matches the labels of the Service
+  endpoints:
+  - port: http # Matches the port name in the Service
+    path: /metrics # Requires prometheus-fastapi-instrumentator in the app
+    interval: 15s
+  namespaceSelector:
+    matchNames:
+    - default

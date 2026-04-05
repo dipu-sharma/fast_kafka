@@ -12,6 +12,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.0.1
@@ -25,6 +27,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
   kafka:
     image: confluentinc/cp-kafka:7.0.1
@@ -47,8 +51,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
 
-  app:
+  accounts-service:
     build:
       context: .
       dockerfile: Dockerfile
@@ -58,7 +64,7 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -68,5 +74,107 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
       KAFKA_TOPIC_TRANSACTIONS: "transactions"
       KAFKA_TOPIC_ACCOUNTS: "accounts"
-    # main.py is in the root
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "services.accounts.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - app-network
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8002:8000"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_db
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TOPIC_TRANSACTIONS: "transactions"
+      KAFKA_TOPIC_ACCOUNTS: "accounts"
+    command: ["uvicorn", "services.payments.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - app-network
+
+  profiles-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8003:8000"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_db
+    command: ["uvicorn", "services.profiles.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - app-network
+
+  transactions-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8004:8000"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_db
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TOPIC_TRANSACTIONS: "transactions"
+      KAFKA_TOPIC_ACCOUNTS: "accounts"
+    command: ["uvicorn", "services.transactions.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - app-network
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    command: ["python", "consumer.py"]
+    networks:
+      - app-network
+
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_db
+    command: ["alembic", "upgrade", "head"]
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    name: fast_kafka_app-network

@@ -2,10 +2,12 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from app.core.database import engine, Base
-from app.core.kafka_producer import start_producer, stop_producer
-from app.accounts.router import router as accounts_router
-from app.transactions.router import router as transactions_router
+from common.database import engine
+from common.kafka import start_producer, stop_producer
+from services.accounts.router import router as accounts_router
+from services.transactions.router import router as transactions_router
+from services.profiles.router import router as profiles_router
+from services.payments.router import router as payments_router
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -18,11 +20,6 @@ logging.getLogger('kafka').setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # DB init
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("✅ Database tables created/verified")
-
     # Kafka start
     await start_producer()
     logger.info("✅ Kafka producer started")
@@ -49,3 +46,5 @@ async def health():
 # Register Routers
 app.include_router(accounts_router)
 app.include_router(transactions_router)
+app.include_router(profiles_router)
+app.include_router(payments_router)
